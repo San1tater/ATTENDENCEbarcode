@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>普通話活動室考勤系統</title>
+    <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: "Microsoft JhengHei", "微軟正黑體", sans-serif;
+        }
+        
+        body {
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #1a73e8, #6c8ef5);
+            color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        
+        .panel {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            flex: 1;
+            min-width: 300px;
+        }
+        
+        .panel h2 {
+            color: #1a73e8;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input, select, textarea, button {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        
+        button {
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-top: 10px;
+            padding: 12px;
+            font-weight: bold;
+        }
+        
+        button:hover {
+            background-color: #0d62d9;
+        }
+        
+        button.secondary {
+            background-color: #5f6368;
+        }
+        
+        button.secondary:hover {
+            background-color: #4a4d52;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            margin: 15px 0;
+            text-align: center;
+            overflow: hidden;
+        }
+        
+        #interactive {
+            width: 100%;
+            height: 120px;
+            border-radius: 5px;
+            background: #000;
+            margin: 0 auto;
+        }
+        
+        /* 强制限制扫描窗口内的视频元素尺寸 */
+        #interactive video,
+        #interactive canvas {
+            width: 100% !important;
+            height: 120px !important;
+            object-fit: cover;
+        }
+        
+        .scan-guide {
+            color: #666;
+            font-size: 14px;
+            margin-top: 10px;
+            text-align: center;
+        }
+        
+        #scan-result {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            background: #f0f7ff;
+            border: 1px solid #c2e0ff;
+            min-height: 60px;
+        }
+        
+        .record-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+            border: 1px solid #eee;
+            border-radius: 5px;
+            padding: 10px;
+        }
+        
+        .record-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .record-item:first-child {
+            background-color: #f0f7ff;
+            font-weight: bold;
+        }
+        
+        .record-item:last-child {
+            border-bottom: none;
+        }
+        
+        .session-selector {
+            margin-bottom: 15px;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .success {
+            background-color: #e6f4ea;
+            border: 1px solid #34a853;
+            color: #137333;
+        }
+        
+        .error {
+            background-color: #fce8e6;
+            border: 1px solid #ea4335;
+            color: #c5221f;
+        }
+        
+        .info {
+            background-color: #e8f0fe;
+            border: 1px solid #1a73e8;
+            color: #174ea6;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 30px;
+            padding: 20px;
+            color: #5f6368;
+            font-size: 14px;
+        }
+        
+        .manual-input {
+            margin-top: 15px;
+        }
+        
+        .scanning-active {
+            border: 2px solid #1a73e8;
+        }
+        
+        .mapping-config {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        
+        .mapping-info {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>普通話活動室考勤系統</h1>
+        <p>學生證條形碼掃描登記 (Code128格式)</p>
+    </header>
+    
+    <div class="container">
+        <div class="panel">
+            <h2>1. 學生編號映射配置</h2>
+            <div class="mapping-config">
+                <div class="form-group">
+                    <label for="mapping-file">上傳學生編號映射文件 (Excel格式)</label>
+                    <input type="file" id="mapping-file" accept=".xlsx, .xls">
+                    <div class="mapping-info">
+                        <p>Excel文件格式要求：</p>
+                        <ul>
+                            <li>第一列：學生編號 (8位數字)</li>
+                            <li>第二列：班別 (例如: P1A)</li>
+                            <li>第三列：學號 (例如: 01)</li>
+                        </ul>
+                    </div>
+                </div>
+                <button id="load-mapping" class="secondary">載入映射文件</button>
+                <div id="mapping-status" class="mapping-info"></div>
+            </div>
+            
+            <h2>2. 登記考勤</h2>
+            <div class="form-group">
+                <label for="session-id">本次考勤識別碼</label>
+                <input type="text" id="session-id" placeholder="例如：2024-03-20-活動1">
+            </div>
+            
+            <button id="start-scan">開始掃描</button>
+            <button id="stop-scan" class="secondary hidden">停止掃描</button>
+            
+            <div id="video-container" class="video-container hidden">
+                <div id="interactive"></div>
+                <div class="scan-guide">請將學生證條形碼對準掃描框</div>
+            </div>
+            
+            <div id="scan-result"></div>
+            
+            <div class="manual-input">
+                <label for="manual-input">手動輸入學生編號</label>
+                <input type="text" id="manual-input" placeholder="若掃描失敗，可手動輸入學生編號">
+                <button id="manual-submit" class="secondary">手動登記</button>
+            </div>
+            
+            <div id="attendance-list" class="record-list">
+                <div class="status info">暫無考勤記錄</div>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h2>3. 考勤記錄</h2>
+            <div class="form-group session-selector">
+                <label for="session-select">選擇活動</label>
+                <select id="session-select">
+                    <option value="">-- 選擇活動 --</option>
+                </select>
+            </div>
+            <div id="records-list" class="record-list">
+                <div class="status info">請選擇活動或該活動暫無記錄</div>
+            </div>
+            <button id="export-excel" class="secondary">匯出為Excel</button>
+            <button id="clear-data" class="secondary">清除所有數據</button>
+        </div>
+    </div>
+    
+    <footer>
+        <p>普通話活動室考勤系統 &copy; 2024 - Code128條形碼掃描版</p>
+    </footer>
+
+    <script>
+        // 存儲考勤數據
+        let attendanceData = JSON.parse(localStorage.getItem('attendanceData')) || {};
+        let currentSessionId = '';
+        let scannedStudents = new Set();
+        let isScanning = false;
+        let studentMapping = JSON.parse(localStorage.getItem('studentMapping')) || {};
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 加載已有的活動列表
+            updateSessionSelect();
+            
+            // 開始掃描按鈕事件
+            document.getElementById('start-scan').addEventListener('click', startScanner);
+            
+            // 停止掃描按鈕事件
+            document.getElementById('stop-scan').addEventListener('click', stopScanner);
+            
+            // 手動登記按鈕事件
+            document.getElementById('manual-submit').addEventListener('click', manualSubmit);
+            
+            // 手動輸入框回車事件
+            document.getElementById('manual-input').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    manualSubmit();
+                }
+            });
+            
+            // 載入映射文件按鈕事件
+            document.getElementById('load-mapping').addEventListener('click', loadMappingFile);
+            
+            // 匯出Excel按鈕事件
+            document.getElementById('export-excel').addEventListener('click', exportToExcel);
+            
+            // 清除數據按鈕事件
+            document.getElementById('clear-data').addEventListener('click', clearAllData);
+            
+            // 活動選擇變化事件
+            document.getElementById('session-select').addEventListener('change', showSessionRecords);
+            
+            // 更新映射狀態顯示
+            updateMappingStatus();
+        });
+        
+        // 載入映射文件
+        function loadMappingFile() {
+            const fileInput = document.getElementById('mapping-file');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showStatus('請選擇映射文件', 'error');
+                return;
+            }
+            
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    
+                    // 假設使用第一個工作表
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, {header: ['studentId', 'class', 'number']});
+                    
+                    // 跳過表頭
+                    jsonData.shift();
+                    
+                    // 構建映射表
+                    const newMapping = {};
+                    let validCount = 0;
+                    
+                    jsonData.forEach(row => {
+                        if (row.studentId && row.class && row.number) {
+                            newMapping[row.studentId] = `${row.class} ${row.number}`;
+                            validCount++;
+                        }
+                    });
+                    
+                    studentMapping = newMapping;
+                    localStorage.setItem('studentMapping', JSON.stringify(studentMapping));
+                    
+                    updateMappingStatus();
+                    showStatus(`成功載入 ${validCount} 條學生映射記錄`, 'success');
+                } catch (error) {
+                    console.error('解析Excel文件錯誤:', error);
+                    showStatus('解析Excel文件失敗，請檢查文件格式', 'error');
+                }
+            };
+            
+            reader.onerror = function() {
+                showStatus('讀取文件失敗', 'error');
+            };
+            
+            reader.readAsArrayBuffer(file);
+        }
+        
+        // 更新映射狀態顯示
+        function updateMappingStatus() {
+            const mappingStatus = document.getElementById('mapping-status');
+            const count = Object.keys(studentMapping).length;
+            
+            if (count > 0) {
+                mappingStatus.innerHTML = `<div class="status success">已載入 ${count} 條學生映射記錄</div>`;
+            } else {
+                mappingStatus.innerHTML = '<div class="status info">尚未載入學生映射文件</div>';
+            }
+        }
+        
+        // 根據學生編號獲取顯示名稱
+        function getDisplayName(studentId) {
+            return studentMapping[studentId] || studentId;
+        }
+        
+        // 開始掃描
+        function startScanner() {
+            currentSessionId = document.getElementById('session-id').value.trim();
+            if (!currentSessionId) {
+                showStatus('請輸入本次考勤識別碼', 'error');
+                return;
+            }
+            
+            // 初始化活動數據
+            if (!attendanceData[currentSessionId]) {
+                attendanceData[currentSessionId] = [];
+            }
+            
+            scannedStudents.clear();
+            updateAttendanceList();
+            
+            const videoContainer = document.getElementById('video-container');
+            const scanResult = document.getElementById('scan-result');
+            const startBtn = document.getElementById('start-scan');
+            const stopBtn = document.getElementById('stop-scan');
+            
+            videoContainer.classList.remove('hidden');
+            stopBtn.classList.remove('hidden');
+            startBtn.classList.add('hidden');
+            scanResult.innerHTML = '';
+            
+            isScanning = true;
+            
+            // 配置Quagga用於Code128條形碼掃描
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.getElementById('interactive'),
+                    constraints: {
+                        facingMode: "environment",
+                        width: { min: 320, ideal: 640, max: 1280 },
+                        height: { min: 120, ideal: 120, max: 240 },
+                        aspectRatio: { min: 2, max: 4 }
+                    }
+                },
+                decoder: {
+                    readers: ["code_128_reader"]
+                },
+                locator: {
+                    patchSize: "medium",
+                    halfSample: true
+                },
+                locate: true,
+                frequency: 10
+            }, function(err) {
+                if (err) {
+                    console.error(err);
+                    showStatus('條形碼掃描器初始化失敗: ' + err.message, 'error');
+                    stopScanner();
+                    return;
+                }
+                Quagga.start();
+                
+                // 强制设置扫描窗口尺寸
+                setTimeout(() => {
+                    const videoElement = document.querySelector('#interactive video');
+                    const canvasElements = document.querySelectorAll('#interactive canvas');
+                    
+                    if (videoElement) {
+                        videoElement.style.width = '100%';
+                        videoElement.style.height = '120px';
+                        videoElement.style.objectFit = 'cover';
+                    }
+                    
+                    canvasElements.forEach(canvas => {
+                        canvas.style.width = '100%';
+                        canvas.style.height = '120px';
+                    });
+                }, 100);
+                
+                showStatus('Code128條形碼掃描器已啟動，請掃描學生證', 'info');
+            });
+            
+            // 監聽條形碼檢測事件
+            Quagga.onDetected(function(result) {
+                if (!isScanning) return;
+                
+                const code = result.codeResult.code;
+                processScannedCode(code);
+            });
+        }
+        
+        // 處理掃描到的條碼
+        function processScannedCode(code) {
+            const scanResult = document.getElementById('scan-result');
+            const displayName = getDisplayName(code);
+            
+            // 不驗證學生編號格式，直接使用掃描到的內容
+            if (!scannedStudents.has(code)) {
+                // 記錄考勤
+                const timestamp = new Date().toLocaleString('zh-TW');
+                const record = {
+                    studentId: code,
+                    displayName: displayName,
+                    timestamp: timestamp
+                };
+                
+                // 將新記錄添加到數組開頭
+                attendanceData[currentSessionId].unshift(record);
+                
+                // 保存到本地存儲
+                localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
+                
+                scannedStudents.add(code);
+                updateAttendanceList();
+                updateSessionSelect();
+                
+                scanResult.innerHTML = `<div class="status success">已登記: ${displayName} - ${timestamp}</div>`;
+                
+                // 短暫顯示成功信息
+                setTimeout(() => {
+                    scanResult.innerHTML = '';
+                }, 2000);
+            } else {
+                scanResult.innerHTML = `<div class="status info">已登記過: ${displayName}</div>`;
+                setTimeout(() => {
+                    scanResult.innerHTML = '';
+                }, 2000);
+            }
+        }
+        
+        // 手動提交學生編號
+        function manualSubmit() {
+            const manualInput = document.getElementById('manual-input');
+            const code = manualInput.value.trim();
+            
+            if (!code) {
+                showStatus('請輸入學生編號', 'error');
+                return;
+            }
+            
+            if (!currentSessionId) {
+                showStatus('請先輸入本次考勤識別碼', 'error');
+                return;
+            }
+            
+            processScannedCode(code);
+            manualInput.value = '';
+        }
+        
+        // 停止掃描
+        function stopScanner() {
+            isScanning = false;
+            
+            const videoContainer = document.getElementById('video-container');
+            const startBtn = document.getElementById('start-scan');
+            const stopBtn = document.getElementById('stop-scan');
+            
+            Quagga.stop();
+            
+            videoContainer.classList.add('hidden');
+            stopBtn.classList.add('hidden');
+            startBtn.classList.remove('hidden');
+            
+            showStatus('掃描已停止', 'info');
+        }
+        
+        // 更新考勤列表
+        function updateAttendanceList() {
+            const attendanceList = document.getElementById('attendance-list');
+            
+            if (attendanceData[currentSessionId] && attendanceData[currentSessionId].length > 0) {
+                // 按時間倒序排列（最新的在最上面）
+                const sortedRecords = [...attendanceData[currentSessionId]].sort((a, b) => 
+                    new Date(b.timestamp) - new Date(a.timestamp)
+                );
+                
+                attendanceList.innerHTML = '';
+                
+                // 添加表頭
+                const header = document.createElement('div');
+                header.className = 'record-item';
+                header.innerHTML = `
+                    <span>學生編號</span>
+                    <span>登記時間</span>
+                `;
+                attendanceList.appendChild(header);
+                
+                sortedRecords.forEach(record => {
+                    const item = document.createElement('div');
+                    item.className = 'record-item';
+                    item.innerHTML = `
+                        <span>${record.displayName}</span>
+                        <span>${record.timestamp}</span>
+                    `;
+                    attendanceList.appendChild(item);
+                });
+            } else {
+                attendanceList.innerHTML = '<div class="status info">暫無考勤記錄</div>';
+            }
+        }
+        
+        // 更新活動選擇下拉框
+        function updateSessionSelect() {
+            const sessionSelect = document.getElementById('session-select');
+            sessionSelect.innerHTML = '<option value="">-- 選擇活動 --</option>';
+            
+            Object.keys(attendanceData).forEach(sessionId => {
+                const option = document.createElement('option');
+                option.value = sessionId;
+                option.textContent = sessionId;
+                sessionSelect.appendChild(option);
+            });
+        }
+        
+        // 顯示活動記錄
+        function showSessionRecords() {
+            const sessionId = document.getElementById('session-select').value;
+            const recordsList = document.getElementById('records-list');
+            
+            if (sessionId && attendanceData[sessionId]) {
+                // 按時間倒序排列（最新的在最上面）
+                const sortedRecords = [...attendanceData[sessionId]].sort((a, b) => 
+                    new Date(b.timestamp) - new Date(a.timestamp)
+                );
+                
+                recordsList.innerHTML = '';
+                
+                // 添加表頭
+                const header = document.createElement('div');
+                header.className = 'record-item';
+                header.innerHTML = `
+                    <span>學生編號</span>
+                    <span>登記時間</span>
+                `;
+                recordsList.appendChild(header);
+                
+                sortedRecords.forEach(record => {
+                    const item = document.createElement('div');
+                    item.className = 'record-item';
+                    item.innerHTML = `
+                        <span>${record.displayName}</span>
+                        <span>${record.timestamp}</span>
+                    `;
+                    recordsList.appendChild(item);
+                });
+                
+                // 顯示統計信息
+                const count = document.createElement('div');
+                count.className = 'status info';
+                count.textContent = `共 ${sortedRecords.length} 條記錄`;
+                recordsList.appendChild(count);
+            } else {
+                recordsList.innerHTML = '<div class="status info">請選擇活動或該活動暫無記錄</div>';
+            }
+        }
+        
+        // 匯出為Excel
+        function exportToExcel() {
+            if (Object.keys(attendanceData).length === 0) {
+                showStatus('暫無考勤記錄可匯出', 'error');
+                return;
+            }
+            
+            const wb = XLSX.utils.book_new();
+            
+            // 為每個活動創建一個工作表
+            Object.keys(attendanceData).forEach(sessionId => {
+                const records = attendanceData[sessionId];
+                const wsData = [
+                    ['學號', '顯示名稱', '時間']  // 表頭
+                ];
+                
+                // 按時間倒序排列（最新的在最上面）
+                const sortedRecords = [...records].sort((a, b) => 
+                    new Date(b.timestamp) - new Date(a.timestamp)
+                );
+                
+                sortedRecords.forEach(record => {
+                    wsData.push([record.studentId, record.displayName, record.timestamp]);
+                });
+                
+                const ws = XLSX.utils.aoa_to_sheet(wsData);
+                XLSX.utils.book_append_sheet(wb, ws, sessionId.substring(0, 31)); // Excel工作表名最多31字符
+            });
+            
+            // 生成並下載Excel文件
+            XLSX.writeFile(wb, '考勤記錄.xlsx');
+            showStatus('Excel文件已生成並開始下載', 'success');
+        }
+        
+        // 清除所有數據
+        function clearAllData() {
+            if (confirm('確定要清除所有考勤數據嗎？此操作不可恢復！')) {
+                attendanceData = {};
+                localStorage.removeItem('attendanceData');
+                updateSessionSelect();
+                document.getElementById('records-list').innerHTML = '<div class="status info">數據已清除</div>';
+                document.getElementById('attendance-list').innerHTML = '<div class="status info">暫無考勤記錄</div>';
+                showStatus('所有數據已清除', 'success');
+            }
+        }
+        
+        // 顯示狀態信息
+        function showStatus(message, type) {
+            // 移除現有的狀態信息
+            const existingStatus = document.querySelector('.status');
+            if (existingStatus && existingStatus.parentNode === document.body) {
+                existingStatus.remove();
+            }
+            
+            // 創建新的狀態信息
+            const status = document.createElement('div');
+            status.className = `status ${type}`;
+            status.textContent = message;
+            
+            // 插入到頁面頂部
+            document.body.insertBefore(status, document.querySelector('header'));
+            
+            // 5秒後自動移除
+            setTimeout(() => {
+                if (status.parentNode) {
+                    status.remove();
+                }
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
