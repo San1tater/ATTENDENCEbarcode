@@ -119,6 +119,16 @@
             color: white;
         }
         
+        button.warning {
+            background-color: #fbbc04;
+            color: white;
+        }
+        
+        button.warning:hover {
+            background-color: #e6a800;
+            color: white;
+        }
+        
         .video-container {
             position: relative;
             width: 100%;
@@ -428,7 +438,12 @@
             <div id="records-list" class="record-list">
                 <div class="status info">請選擇活動或該活動暫無記錄</div>
             </div>
-            <button id="export-excel" class="secondary">匯出為Excel</button>
+            
+            <div class="management-buttons">
+                <button id="cleanup-data" class="warning">清理數據（學號去零 & 去重）</button>
+                <button id="export-excel" class="secondary">匯出為Excel</button>
+            </div>
+            
             <button id="clear-data" class="danger">清除所有數據</button>
             
             <h2 style="margin-top: 30px;">4. 參與次數統計</h2>
@@ -501,6 +516,9 @@
             
             // 清除數據按鈕事件
             document.getElementById('clear-data').addEventListener('click', clearAllData);
+            
+            // 清理數據按鈕事件
+            document.getElementById('cleanup-data').addEventListener('click', cleanupData);
             
             // 活動選擇變化事件
             document.getElementById('session-select').addEventListener('change', showSessionRecords);
@@ -662,6 +680,105 @@
             }
             
             return attendanceData[currentSessionId].some(record => record.studentId === studentId);
+        }
+        
+        // 清理數據：將學號從"01"格式改為"1"格式，並移除同一活動中重複的登記
+        function cleanupData() {
+            if (Object.keys(attendanceData).length === 0) {
+                showStatus('暫無考勤記錄可清理', 'info');
+                return;
+            }
+            
+            if (!confirm('確定要清理數據嗎？此操作將：\n1. 將學號從"01"格式改為"1"格式\n2. 移除同一活動中重複的登記，只保留最晚的一個\n此操作不可恢復！')) {
+                return;
+            }
+            
+            let totalCleanedRecords = 0;
+            let totalRemovedDuplicates = 0;
+            
+            // 遍歷所有活動
+            for (const sessionId in attendanceData) {
+                const sessionRecords = attendanceData[sessionId];
+                
+                if (!sessionRecords || sessionRecords.length === 0) {
+                    continue;
+                }
+                
+                // 用於跟蹤每個學生的最新記錄
+                const latestRecords = {};
+                const cleanedRecords = [];
+                
+                // 首先處理每條記錄，將學號格式標準化
+                const processedRecords = sessionRecords.map(record => {
+                    const cleanedRecord = {...record};
+                    
+                    // 處理學號：將"01"格式改為"1"格式
+                    if (cleanedRecord.number) {
+                        // 如果是數字字符串，移除前導零
+                        if (/^\d+$/.test(cleanedRecord.number)) {
+                            const originalNumber = cleanedRecord.number;
+                            cleanedRecord.number = String(parseInt(cleanedRecord.number, 10));
+                            
+                            if (originalNumber !== cleanedRecord.number) {
+                                totalCleanedRecords++;
+                            }
+                        }
+                    }
+                    
+                    // 更新displayName以反映新的學號格式
+                    if (cleanedRecord.class && cleanedRecord.number) {
+                        cleanedRecord.displayName = `${cleanedRecord.class} ${cleanedRecord.number}`;
+                    }
+                    
+                    return cleanedRecord;
+                });
+                
+                // 按時間排序（從早到晚），以便保留最晚的記錄
+                const sortedRecords = [...processedRecords].sort((a, b) => {
+                    return new Date(a.timestamp) - new Date(b.timestamp);
+                });
+                
+                // 遍歷排序後的記錄，保留每個學生的最新記錄
+                for (const record of sortedRecords) {
+                    const studentId = record.studentId;
+                    
+                    // 如果已經有該學生的記錄，用當前的記錄替換（因為是按時間排序的，所以後面的會更晚）
+                    if (latestRecords[studentId]) {
+                        totalRemovedDuplicates++;
+                    }
+                    
+                    latestRecords[studentId] = record;
+                }
+                
+                // 將最新的記錄轉換為數組
+                const uniqueRecords = Object.values(latestRecords);
+                
+                // 按時間倒序排列（最新的在最前面）
+                uniqueRecords.sort((a, b) => {
+                    return new Date(b.timestamp) - new Date(a.timestamp);
+                });
+                
+                // 更新該活動的記錄
+                attendanceData[sessionId] = uniqueRecords;
+            }
+            
+            // 保存到本地存儲
+            localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
+            
+            // 更新UI
+            updateSessionSelect();
+            showSessionRecords();
+            
+            if (currentSessionId && attendanceData[currentSessionId]) {
+                updateAttendanceList();
+            }
+            
+            // 顯示清理結果
+            const message = `數據清理完成！\n` +
+                           `- 標準化 ${totalCleanedRecords} 個學號格式\n` +
+                           `- 移除 ${totalRemovedDuplicates} 個重複登記`;
+            
+            showStatus(message, 'success');
         }
         
         // 開始掃描
