@@ -101,6 +101,14 @@
             background-color: #4a4d52;
         }
         
+        button.danger {
+            background-color: #ea4335;
+        }
+        
+        button.danger:hover {
+            background-color: #d32f2f;
+        }
+        
         .video-container {
             position: relative;
             width: 100%;
@@ -234,6 +242,54 @@
             margin-top: 5px;
         }
         
+        .management-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .management-buttons button {
+            flex: 1;
+            margin-top: 0;
+        }
+        
+        .dialog-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .dialog {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .dialog h3 {
+            margin-bottom: 15px;
+            color: #1a73e8;
+        }
+        
+        .dialog-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .dialog-buttons button {
+            flex: 1;
+        }
+        
         @media (max-width: 768px) {
             .container {
                 flex-direction: column;
@@ -303,11 +359,17 @@
                     <option value="">-- 選擇活動 --</option>
                 </select>
             </div>
+            
+            <div class="management-buttons">
+                <button id="rename-session" class="secondary">重命名活動</button>
+                <button id="delete-session" class="danger">刪除活動</button>
+            </div>
+            
             <div id="records-list" class="record-list">
                 <div class="status info">請選擇活動或該活動暫無記錄</div>
             </div>
             <button id="export-excel" class="secondary">匯出為Excel</button>
-            <button id="clear-data" class="secondary">清除所有數據</button>
+            <button id="clear-data" class="danger">清除所有數據</button>
         </div>
     </div>
     
@@ -356,6 +418,12 @@
             
             // 活動選擇變化事件
             document.getElementById('session-select').addEventListener('change', showSessionRecords);
+            
+            // 重命名活動按鈕事件
+            document.getElementById('rename-session').addEventListener('click', renameSession);
+            
+            // 刪除活動按鈕事件
+            document.getElementById('delete-session').addEventListener('click', deleteSession);
             
             // 更新映射狀態顯示
             updateMappingStatus();
@@ -819,6 +887,35 @@
             }
         }
         
+        // 班別排序函數：按照 P1A-P6E 的順序
+        function sortClass(classA, classB) {
+            if (!classA || !classB) return 0;
+            
+            // 提取年級和班級字母
+            const gradeA = parseInt(classA.substring(1, 2));
+            const letterA = classA.substring(2, 3);
+            const gradeB = parseInt(classB.substring(1, 2));
+            const letterB = classB.substring(2, 3);
+            
+            // 先比較年級
+            if (gradeA !== gradeB) {
+                return gradeA - gradeB;
+            }
+            
+            // 同年級比較班級字母
+            return letterA.localeCompare(letterB);
+        }
+        
+        // 學號排序函數：按照數字大小
+        function sortNumber(numberA, numberB) {
+            if (!numberA || !numberB) return 0;
+            
+            const numA = parseInt(numberA) || 0;
+            const numB = parseInt(numberB) || 0;
+            
+            return numA - numB;
+        }
+        
         // 匯出為Excel
         function exportToExcel() {
             if (Object.keys(attendanceData).length === 0) {
@@ -836,12 +933,24 @@
                     ['學生證號 (後台識別)', '班別', '學號', '登記時間']  // 表頭
                 ];
                 
-                // 按時間倒序排列（最新的在最上面）
-                const sortedRecords = [...records].sort((a, b) => 
-                    new Date(b.timestamp) - new Date(a.timestamp)
-                );
+                // 過濾掉沒有班別和學號的記錄（用於排序）
+                const recordsWithClassNumber = records.filter(record => record.class && record.number);
+                const recordsWithoutClassNumber = records.filter(record => !record.class || !record.number);
                 
-                sortedRecords.forEach(record => {
+                // 按班別（P1A-P6E）和學號（小到大）排序
+                const sortedRecords = [...recordsWithClassNumber].sort((a, b) => {
+                    // 先按班別排序
+                    const classCompare = sortClass(a.class, b.class);
+                    if (classCompare !== 0) return classCompare;
+                    
+                    // 班別相同則按學號排序
+                    return sortNumber(a.number, b.number);
+                });
+                
+                // 將沒有班別和學號的記錄添加到最後
+                const finalRecords = [...sortedRecords, ...recordsWithoutClassNumber];
+                
+                finalRecords.forEach(record => {
                     // 確保有班別和學號
                     const className = record.class || '';
                     const number = record.number || '';
@@ -880,8 +989,179 @@
             });
             
             // 生成並下載Excel文件
-            XLSX.writeFile(wb, '考勤記錄.xlsx');
+            const fileName = `考勤記錄_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            XLSX.writeFile(wb, fileName);
             showStatus('Excel文件已生成並開始下載', 'success');
+        }
+        
+        // 重命名活動
+        function renameSession() {
+            const sessionSelect = document.getElementById('session-select');
+            const oldSessionId = sessionSelect.value;
+            
+            if (!oldSessionId) {
+                showStatus('請先選擇要重命名的活動', 'error');
+                return;
+            }
+            
+            // 創建對話框
+            const dialogOverlay = document.createElement('div');
+            dialogOverlay.className = 'dialog-overlay';
+            
+            const dialog = document.createElement('div');
+            dialog.className = 'dialog';
+            
+            dialog.innerHTML = `
+                <h3>重命名活動</h3>
+                <div class="form-group">
+                    <label for="new-session-name">新活動名稱</label>
+                    <input type="text" id="new-session-name" value="${oldSessionId}" placeholder="請輸入新活動名稱">
+                </div>
+                <div class="dialog-buttons">
+                    <button id="cancel-rename" class="secondary">取消</button>
+                    <button id="confirm-rename" class="secondary">確認重命名</button>
+                </div>
+            `;
+            
+            dialogOverlay.appendChild(dialog);
+            document.body.appendChild(dialogOverlay);
+            
+            // 設置焦點到輸入框
+            setTimeout(() => {
+                document.getElementById('new-session-name').focus();
+            }, 100);
+            
+            // 取消按鈕事件
+            document.getElementById('cancel-rename').addEventListener('click', function() {
+                document.body.removeChild(dialogOverlay);
+            });
+            
+            // 確認按鈕事件
+            document.getElementById('confirm-rename').addEventListener('click', function() {
+                const newSessionId = document.getElementById('new-session-name').value.trim();
+                
+                if (!newSessionId) {
+                    showStatus('新活動名稱不能為空', 'error');
+                    return;
+                }
+                
+                if (newSessionId === oldSessionId) {
+                    showStatus('新活動名稱與原名稱相同', 'info');
+                    document.body.removeChild(dialogOverlay);
+                    return;
+                }
+                
+                if (attendanceData[newSessionId]) {
+                    showStatus('活動名稱已存在，請使用其他名稱', 'error');
+                    return;
+                }
+                
+                // 重命名活動
+                attendanceData[newSessionId] = attendanceData[oldSessionId];
+                delete attendanceData[oldSessionId];
+                
+                // 更新本地存儲
+                localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
+                
+                // 更新UI
+                updateSessionSelect();
+                showSessionRecords();
+                
+                // 如果當前活動是正在掃描的活動，更新currentSessionId
+                if (currentSessionId === oldSessionId) {
+                    currentSessionId = newSessionId;
+                    document.getElementById('session-id').value = newSessionId;
+                    updateAttendanceList();
+                }
+                
+                // 選擇新活動
+                document.getElementById('session-select').value = newSessionId;
+                
+                showStatus(`活動已重命名為: ${newSessionId}`, 'success');
+                document.body.removeChild(dialogOverlay);
+            });
+            
+            // 回車鍵確認
+            document.getElementById('new-session-name').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    document.getElementById('confirm-rename').click();
+                }
+            });
+            
+            // 點擊背景關閉
+            dialogOverlay.addEventListener('click', function(e) {
+                if (e.target === dialogOverlay) {
+                    document.body.removeChild(dialogOverlay);
+                }
+            });
+        }
+        
+        // 刪除活動
+        function deleteSession() {
+            const sessionSelect = document.getElementById('session-select');
+            const sessionId = sessionSelect.value;
+            
+            if (!sessionId) {
+                showStatus('請先選擇要刪除的活動', 'error');
+                return;
+            }
+            
+            // 創建對話框
+            const dialogOverlay = document.createElement('div');
+            dialogOverlay.className = 'dialog-overlay';
+            
+            const dialog = document.createElement('div');
+            dialog.className = 'dialog';
+            
+            dialog.innerHTML = `
+                <h3>刪除活動</h3>
+                <div class="form-group">
+                    <p>確定要刪除活動 <strong>"${sessionId}"</strong> 嗎？</p>
+                    <p>此操作將刪除該活動的所有考勤記錄，且無法恢復。</p>
+                </div>
+                <div class="dialog-buttons">
+                    <button id="cancel-delete" class="secondary">取消</button>
+                    <button id="confirm-delete" class="danger">確認刪除</button>
+                </div>
+            `;
+            
+            dialogOverlay.appendChild(dialog);
+            document.body.appendChild(dialogOverlay);
+            
+            // 取消按鈕事件
+            document.getElementById('cancel-delete').addEventListener('click', function() {
+                document.body.removeChild(dialogOverlay);
+            });
+            
+            // 確認按鈕事件
+            document.getElementById('confirm-delete').addEventListener('click', function() {
+                // 刪除活動
+                delete attendanceData[sessionId];
+                
+                // 更新本地存儲
+                localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
+                
+                // 更新UI
+                updateSessionSelect();
+                document.getElementById('records-list').innerHTML = '<div class="status info">活動已刪除</div>';
+                
+                // 如果當前活動是被刪除的活動，清空currentSessionId
+                if (currentSessionId === sessionId) {
+                    currentSessionId = '';
+                    document.getElementById('session-id').value = '';
+                    updateAttendanceList();
+                }
+                
+                showStatus(`活動 "${sessionId}" 已刪除`, 'success');
+                document.body.removeChild(dialogOverlay);
+            });
+            
+            // 點擊背景關閉
+            dialogOverlay.addEventListener('click', function(e) {
+                if (e.target === dialogOverlay) {
+                    document.body.removeChild(dialogOverlay);
+                }
+            });
         }
         
         // 清除所有數據
