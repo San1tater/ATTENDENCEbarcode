@@ -228,6 +228,12 @@
             color: #666;
         }
         
+        .manual-input-format {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
         @media (max-width: 768px) {
             .container {
                 flex-direction: column;
@@ -251,7 +257,7 @@
                     <div class="mapping-info">
                         <p>Excel文件格式要求：</p>
                         <ul>
-                            <li>第一列：學生編號 (8位數字)</li>
+                            <li>第一列：學生證號 (8位數字)</li>
                             <li>第二列：班別 (例如: P1A)</li>
                             <li>第三列：學號 (例如: 01)</li>
                         </ul>
@@ -278,8 +284,9 @@
             <div id="scan-result"></div>
             
             <div class="manual-input">
-                <label for="manual-input">手動輸入 (班別 學號 或 學生證號)</label>
-                <input type="text" id="manual-input" placeholder="例如: P2D 1 或 12345678">
+                <label for="manual-input">手動輸入</label>
+                <input type="text" id="manual-input" placeholder="可輸入學生證號 或 班別 學號 (如: P2D 1)">
+                <div class="manual-input-format">支援格式：學生證號 (8位數字) 或 班別+空格+學號 (如: P2D 1)</div>
                 <button id="manual-submit" class="secondary">手動登記</button>
             </div>
             
@@ -315,7 +322,7 @@
         let scannedStudents = new Set();
         let isScanning = false;
         let studentMapping = JSON.parse(localStorage.getItem('studentMapping')) || {};
-        let reverseMapping = {}; // 反向映射：班別+學號 -> 學生證號
+        let reverseMapping = {}; // 反向映射：班別學號 -> 學生證號
 
         // 初始化
         document.addEventListener('DOMContentLoaded', function() {
@@ -352,6 +359,7 @@
             
             // 更新映射狀態顯示
             updateMappingStatus();
+            updateReverseMapping();
         });
         
         // 驗證學生證號格式
@@ -361,27 +369,16 @@
             return pattern.test(studentId);
         }
         
-        // 驗證班別學號格式
-        function isValidClassNumber(input) {
-            // 格式: 班別 學號 (例如: P2D 1, P1A 01)
-            const pattern = /^([A-Za-z0-9]{2,4}) (\d{1,2})$/;
-            return pattern.test(input);
-        }
-        
-        // 解析班別學號
+        // 解析班別學號格式
         function parseClassNumber(input) {
-            const parts = input.split(' ');
-            if (parts.length >= 2) {
-                const classPart = parts[0];
-                const numberPart = parts[1];
-                // 學號補零 (如果是個位數)
-                const formattedNumber = numberPart.length === 1 ? '0' + numberPart : numberPart;
-                const formattedInput = `${classPart} ${formattedNumber}`;
+            // 格式：班別 學號，如 "P2D 1" 或 "P2D 01"
+            const pattern = /^([A-Za-z][0-9][A-Za-z])\s+([0-9]{1,2})$/;
+            const match = input.match(pattern);
+            
+            if (match) {
                 return {
-                    class: classPart,
-                    number: formattedNumber,
-                    original: input,
-                    formatted: formattedInput
+                    class: match[1].toUpperCase(),
+                    number: match[2].padStart(2, '0')
                 };
             }
             return null;
@@ -420,17 +417,9 @@
                         if (row.studentId && row.class && row.number) {
                             // 驗證學生證號格式
                             if (isValidStudentId(row.studentId)) {
-                                // 格式化學號
-                                const formattedNumber = row.number.toString().length === 1 ? '0' + row.number : row.number.toString();
-                                const classNumberKey = `${row.class} ${formattedNumber}`;
-                                
-                                newMapping[row.studentId] = {
-                                    class: row.class,
-                                    number: formattedNumber,
-                                    display: classNumberKey
-                                };
-                                
-                                newReverseMapping[classNumberKey] = row.studentId;
+                                const classNumber = `${row.class} ${row.number}`;
+                                newMapping[row.studentId] = classNumber;
+                                newReverseMapping[classNumber] = row.studentId;
                                 validCount++;
                             }
                         }
@@ -439,9 +428,9 @@
                     studentMapping = newMapping;
                     reverseMapping = newReverseMapping;
                     localStorage.setItem('studentMapping', JSON.stringify(studentMapping));
-                    localStorage.setItem('reverseMapping', JSON.stringify(reverseMapping));
                     
                     updateMappingStatus();
+                    updateReverseMapping();
                     showStatus(`成功載入 ${validCount} 條學生映射記錄`, 'success');
                 } catch (error) {
                     console.error('解析Excel文件錯誤:', error);
@@ -468,28 +457,22 @@
             }
         }
         
-        // 根據學生編號獲取班別學號資訊
-        function getClassNumberInfo(studentId) {
-            if (studentMapping[studentId]) {
-                return studentMapping[studentId];
+        // 更新反向映射
+        function updateReverseMapping() {
+            reverseMapping = {};
+            for (const studentId in studentMapping) {
+                reverseMapping[studentMapping[studentId]] = studentId;
             }
-            return null;
         }
         
-        // 根據班別學號獲取學生編號
+        // 根據學生編號獲取顯示名稱
+        function getDisplayName(studentId) {
+            return studentMapping[studentId] || studentId;
+        }
+        
+        // 根據班別學號獲取學生證號
         function getStudentIdByClassNumber(classNumber) {
-            // 先嘗試直接查找
-            if (reverseMapping[classNumber]) {
-                return reverseMapping[classNumber];
-            }
-            
-            // 如果找不到，嘗試解析並格式化後再查找
-            const parsed = parseClassNumber(classNumber);
-            if (parsed && reverseMapping[parsed.formatted]) {
-                return reverseMapping[parsed.formatted];
-            }
-            
-            return null;
+            return reverseMapping[classNumber] || null;
         }
         
         // 開始掃描
@@ -576,12 +559,12 @@
                 if (!isScanning) return;
                 
                 const code = result.codeResult.code;
-                processScannedCode(code, 'scan');
+                processScannedCode(code);
             });
         }
         
         // 處理掃描到的條碼
-        function processScannedCode(code, source) {
+        function processScannedCode(code) {
             const scanResult = document.getElementById('scan-result');
             
             // 驗證學生證號格式
@@ -593,24 +576,30 @@
                 return;
             }
             
-            // 獲取顯示資訊
-            const classNumberInfo = getClassNumberInfo(code);
-            const displayName = classNumberInfo ? classNumberInfo.display : code;
-            const studentClass = classNumberInfo ? classNumberInfo.class : '';
-            const studentNumber = classNumberInfo ? classNumberInfo.number : '';
+            const displayName = getDisplayName(code);
             
-            // 使用學生證號作為唯一識別碼
+            // 不驗證學生編號格式，直接使用掃描到的內容
             if (!scannedStudents.has(code)) {
                 // 記錄考勤
                 const timestamp = new Date().toLocaleString('zh-TW');
                 const record = {
-                    studentId: code, // 8位學生證號
-                    displayName: displayName, // 顯示名稱
-                    class: studentClass, // 班別
-                    number: studentNumber, // 學號
+                    studentId: code,
+                    displayName: displayName,
                     timestamp: timestamp,
-                    source: source
+                    // 分離班別和學號
+                    class: null,
+                    number: null
                 };
+                
+                // 如果有映射，分離班別和學號
+                if (studentMapping[code]) {
+                    const classNumber = studentMapping[code];
+                    const parts = classNumber.split(' ');
+                    if (parts.length === 2) {
+                        record.class = parts[0];
+                        record.number = parts[1];
+                    }
+                }
                 
                 // 將新記錄添加到數組開頭
                 attendanceData[currentSessionId].unshift(record);
@@ -642,7 +631,7 @@
             const input = manualInput.value.trim();
             
             if (!input) {
-                showStatus('請輸入學生編號或班別學號', 'error');
+                showStatus('請輸入學生證號或班別學號', 'error');
                 return;
             }
             
@@ -651,32 +640,75 @@
                 return;
             }
             
-            let studentId = '';
+            let studentId = null;
+            let displayName = null;
             
-            // 檢查輸入格式
+            // 檢查是否是學生證號格式
             if (isValidStudentId(input)) {
-                // 輸入的是學生證號
                 studentId = input;
-            } else if (isValidClassNumber(input)) {
-                // 輸入的是班別學號格式
+                displayName = getDisplayName(studentId);
+            } 
+            // 檢查是否是班別學號格式
+            else if (parseClassNumber(input)) {
                 const parsed = parseClassNumber(input);
-                if (parsed) {
-                    // 查找對應的學生證號
-                    studentId = getStudentIdByClassNumber(parsed.formatted);
-                    if (!studentId) {
-                        showStatus(`找不到對應的學生證號: ${parsed.formatted}`, 'error');
-                        return;
-                    }
+                const classNumber = `${parsed.class} ${parsed.number}`;
+                studentId = getStudentIdByClassNumber(classNumber);
+                
+                if (studentId) {
+                    displayName = classNumber;
                 } else {
-                    showStatus('輸入格式錯誤，請輸入班別 學號 (例如: P2D 1)', 'error');
+                    showStatus(`未找到對應的學生證號: ${classNumber}，請先載入映射文件`, 'error');
                     return;
                 }
             } else {
-                showStatus('輸入格式錯誤，請輸入8位數字學生證號或班別 學號 (例如: P2D 1)', 'error');
+                showStatus(`無效輸入格式: ${input} (必須是8位數字、3位英文字母 或 班別 學號格式如: P2D 1)`, 'error');
                 return;
             }
             
-            processScannedCode(studentId, 'manual');
+            // 驗證學生證號格式
+            if (!isValidStudentId(studentId)) {
+                showStatus(`無效學生證號: ${studentId} (必須是8位數字或3位英文字母)`, 'error');
+                return;
+            }
+            
+            // 記錄考勤
+            const timestamp = new Date().toLocaleString('zh-TW');
+            const record = {
+                studentId: studentId,
+                displayName: displayName,
+                timestamp: timestamp,
+                // 分離班別和學號
+                class: null,
+                number: null
+            };
+            
+            // 解析班別和學號
+            if (displayName.includes(' ')) {
+                const parts = displayName.split(' ');
+                if (parts.length === 2) {
+                    record.class = parts[0];
+                    record.number = parts[1];
+                }
+            }
+            
+            // 將新記錄添加到數組開頭
+            attendanceData[currentSessionId].unshift(record);
+            
+            // 保存到本地存儲
+            localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
+            
+            scannedStudents.add(studentId);
+            updateAttendanceList();
+            updateSessionSelect();
+            
+            const scanResult = document.getElementById('scan-result');
+            scanResult.innerHTML = `<div class="status success">已登記: ${displayName} - ${timestamp}</div>`;
+            
+            // 短暫顯示成功信息
+            setTimeout(() => {
+                scanResult.innerHTML = '';
+            }, 2000);
+            
             manualInput.value = '';
         }
         
@@ -713,7 +745,7 @@
                 const header = document.createElement('div');
                 header.className = 'record-item';
                 header.innerHTML = `
-                    <span>班別學號</span>
+                    <span>學生編號</span>
                     <span>登記時間</span>
                 `;
                 attendanceList.appendChild(header);
@@ -762,7 +794,7 @@
                 const header = document.createElement('div');
                 header.className = 'record-item';
                 header.innerHTML = `
-                    <span>班別學號</span>
+                    <span>學生編號</span>
                     <span>登記時間</span>
                 `;
                 recordsList.appendChild(header);
@@ -800,7 +832,7 @@
             Object.keys(attendanceData).forEach(sessionId => {
                 const records = attendanceData[sessionId];
                 const wsData = [
-                    ['學生證號', '班別', '學號', '顯示名稱', '時間', '來源']  // 表頭
+                    ['學生證號 (後台識別)', '班別', '學號', '登記時間']  // 表頭
                 ];
                 
                 // 按時間倒序排列（最新的在最上面）
@@ -809,13 +841,15 @@
                 );
                 
                 sortedRecords.forEach(record => {
+                    // 確保有班別和學號
+                    const className = record.class || '';
+                    const number = record.number || '';
+                    
                     wsData.push([
-                        record.studentId,
-                        record.class,
-                        record.number,
-                        record.displayName,
-                        record.timestamp,
-                        record.source === 'scan' ? '掃描' : '手動輸入'
+                        record.studentId,  // 學生證號 (後台識別)
+                        className,          // 班別
+                        number,             // 學號
+                        record.timestamp    // 登記時間
                     ]);
                 });
                 
