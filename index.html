@@ -827,6 +827,7 @@
             }
             
             const wb = XLSX.utils.book_new();
+            const usedSheetNames = {}; // 用於追踪已使用的工作表名稱
             
             // 為每個活動創建一個工作表
             Object.keys(attendanceData).forEach(sessionId => {
@@ -854,7 +855,28 @@
                 });
                 
                 const ws = XLSX.utils.aoa_to_sheet(wsData);
-                XLSX.utils.book_append_sheet(wb, ws, sessionId.substring(0, 31)); // Excel工作表名最多31字符
+                
+                // 清理工作表名稱中的非法字符
+                let sheetName = sessionId.substring(0, 31); // Excel工作表名最多31字符
+                sheetName = sheetName.replace(/[:\\\/?*[\]]/g, '_'); // 替換非法字符為下劃線
+                
+                // 如果工作表名稱為空，使用默認名稱
+                if (!sheetName.trim()) {
+                    sheetName = `Session_${Object.keys(attendanceData).indexOf(sessionId) + 1}`;
+                }
+                
+                // 確保工作表名稱唯一
+                let originalName = sheetName;
+                let counter = 1;
+                while (usedSheetNames[sheetName]) {
+                    sheetName = `${originalName}_${counter}`;
+                    // 確保不超過31個字符
+                    sheetName = sheetName.substring(0, 31);
+                    counter++;
+                }
+                
+                usedSheetNames[sheetName] = true;
+                XLSX.utils.book_append_sheet(wb, ws, sheetName);
             });
             
             // 生成並下載Excel文件
