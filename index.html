@@ -109,6 +109,14 @@
             background-color: #d32f2f;
         }
         
+        button.success {
+            background-color: #34a853;
+        }
+        
+        button.success:hover {
+            background-color: #2e8b47;
+        }
+        
         .video-container {
             position: relative;
             width: 100%;
@@ -206,6 +214,12 @@
             color: #174ea6;
         }
         
+        .warning {
+            background-color: #fef7e0;
+            border: 1px solid #fbbc04;
+            color: #e37400;
+        }
+        
         footer {
             text-align: center;
             margin-top: 30px;
@@ -271,7 +285,9 @@
             padding: 20px;
             border-radius: 10px;
             width: 90%;
-            max-width: 400px;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
         }
         
@@ -290,8 +306,50 @@
             flex: 1;
         }
         
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        .stats-table th, .stats-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        
+        .stats-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        
+        .stats-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        .stats-table tr:hover {
+            background-color: #f5f5f5;
+        }
+        
+        .stats-container {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 15px;
+            border: 1px solid #eee;
+            border-radius: 5px;
+            padding: 10px;
+        }
+        
+        .export-stats-btn {
+            margin-top: 15px;
+        }
+        
         @media (max-width: 768px) {
             .container {
+                flex-direction: column;
+            }
+            
+            .management-buttons {
                 flex-direction: column;
             }
         }
@@ -370,6 +428,24 @@
             </div>
             <button id="export-excel" class="secondary">匯出為Excel</button>
             <button id="clear-data" class="danger">清除所有數據</button>
+            
+            <h2 style="margin-top: 30px;">4. 參與次數統計</h2>
+            <div class="form-group">
+                <label for="stats-file">導入考勤文件 (Excel格式)</label>
+                <input type="file" id="stats-file" accept=".xlsx, .xls">
+                <div class="mapping-info">
+                    <p>導入之前導出的考勤Excel文件，系統將統計每個學生的參與次數</p>
+                </div>
+            </div>
+            <button id="generate-stats" class="success">生成參與次數統計</button>
+            
+            <div id="stats-result" class="hidden">
+                <div class="stats-container" id="stats-container">
+                    <div class="status info">暫無統計數據</div>
+                </div>
+                
+                <button id="export-stats" class="export-stats-btn secondary hidden">匯出統計結果</button>
+            </div>
         </div>
     </div>
     
@@ -385,6 +461,14 @@
         let isScanning = false;
         let studentMapping = JSON.parse(localStorage.getItem('studentMapping')) || {};
         let reverseMapping = {}; // 反向映射：班別學號 -> 學生證號
+        
+        // 統計數據
+        let statsData = {
+            students: {}, // 學生參與次數數據
+            sessions: 0,  // 總活動數
+            sessionNames: [], // 所有活動名稱
+            summary: {}   // 班級統計摘要
+        };
 
         // 初始化
         document.addEventListener('DOMContentLoaded', function() {
@@ -424,6 +508,12 @@
             
             // 刪除活動按鈕事件
             document.getElementById('delete-session').addEventListener('click', deleteSession);
+            
+            // 生成統計按鈕事件
+            document.getElementById('generate-stats').addEventListener('click', generateAttendanceStats);
+            
+            // 匯出統計結果按鈕事件
+            document.getElementById('export-stats').addEventListener('click', exportStatsToExcel);
             
             // 更新映射狀態顯示
             updateMappingStatus();
@@ -1219,6 +1309,232 @@
                     document.body.removeChild(dialogOverlay);
                 }
             });
+        }
+        
+        // 生成參與次數統計
+        function generateAttendanceStats() {
+            const fileInput = document.getElementById('stats-file');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showStatus('請選擇考勤Excel文件', 'error');
+                return;
+            }
+            
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    
+                    // 重置統計數據
+                    statsData = {
+                        students: {},
+                        sessions: workbook.SheetNames.length,
+                        sessionNames: workbook.SheetNames,
+                        summary: {}
+                    };
+                    
+                    let totalAttendance = 0;
+                    
+                    // 遍歷每個工作表（每個活動）
+                    workbook.SheetNames.forEach(sheetName => {
+                        const worksheet = workbook.Sheets[sheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                        
+                        // 跳過表頭行
+                        for (let i = 1; i < jsonData.length; i++) {
+                            const row = jsonData[i];
+                            if (row.length >= 3) {
+                                const studentClass = row[1] || ''; // 班別
+                                const studentNumber = row[2] || ''; // 學號
+                                
+                                if (studentClass && studentNumber) {
+                                    const studentKey = `${studentClass} ${studentNumber}`;
+                                    
+                                    // 初始化學生數據
+                                    if (!statsData.students[studentKey]) {
+                                        statsData.students[studentKey] = {
+                                            class: studentClass,
+                                            number: studentNumber,
+                                            count: 0,
+                                            attendedSessions: [] // 參與的活動代碼列表
+                                        };
+                                        
+                                        // 初始化班級統計
+                                        if (!statsData.summary[studentClass]) {
+                                            statsData.summary[studentClass] = {
+                                                studentCount: 0,
+                                                totalAttendance: 0,
+                                                students: []
+                                            };
+                                        }
+                                        statsData.summary[studentClass].studentCount++;
+                                        statsData.summary[studentClass].students.push(studentKey);
+                                    }
+                                    
+                                    // 增加參與次數
+                                    statsData.students[studentKey].count++;
+                                    
+                                    // 記錄參與的活動代碼（如果尚未記錄）
+                                    if (!statsData.students[studentKey].attendedSessions.includes(sheetName)) {
+                                        statsData.students[studentKey].attendedSessions.push(sheetName);
+                                    }
+                                    
+                                    statsData.summary[studentClass].totalAttendance++;
+                                    totalAttendance++;
+                                }
+                            }
+                        }
+                    });
+                    
+                    // 顯示統計結果
+                    displayStats();
+                    showStatus(`成功分析 ${statsData.sessions} 個活動，共 ${Object.keys(statsData.students).length} 名學生的參與記錄`, 'success');
+                } catch (error) {
+                    console.error('解析統計文件錯誤:', error);
+                    showStatus('解析統計文件失敗，請檢查文件格式', 'error');
+                }
+            };
+            
+            reader.onerror = function() {
+                showStatus('讀取文件失敗', 'error');
+            };
+            
+            reader.readAsArrayBuffer(file);
+        }
+        
+        // 顯示統計結果
+        function displayStats() {
+            const statsResult = document.getElementById('stats-result');
+            const statsContainer = document.getElementById('stats-container');
+            const exportStatsBtn = document.getElementById('export-stats');
+            
+            // 顯示統計區域
+            statsResult.classList.remove('hidden');
+            exportStatsBtn.classList.remove('hidden');
+            
+            // 清空容器
+            statsContainer.innerHTML = '';
+            
+            // 按班別排序
+            const sortedClasses = Object.keys(statsData.summary).sort(sortClass);
+            
+            // 為每個班別創建表格
+            sortedClasses.forEach(className => {
+                const classData = statsData.summary[className];
+                
+                // 創建班別標題
+                const classTitle = document.createElement('h4');
+                classTitle.textContent = `班別: ${className} (${classData.studentCount} 名學生)`;
+                classTitle.style.marginTop = '20px';
+                classTitle.style.marginBottom = '10px';
+                classTitle.style.color = '#1a73e8';
+                statsContainer.appendChild(classTitle);
+                
+                // 創建表格
+                const table = document.createElement('table');
+                table.className = 'stats-table';
+                
+                // 創建表頭
+                const thead = document.createElement('thead');
+                thead.innerHTML = `
+                    <tr>
+                        <th>學號</th>
+                        <th>參與次數</th>
+                    </tr>
+                `;
+                table.appendChild(thead);
+                
+                // 創建表體
+                const tbody = document.createElement('tbody');
+                
+                // 按學號排序
+                const sortedStudents = classData.students.sort((a, b) => {
+                    const numA = parseInt(statsData.students[a].number) || 0;
+                    const numB = parseInt(statsData.students[b].number) || 0;
+                    return numA - numB;
+                });
+                
+                // 添加學生數據行
+                sortedStudents.forEach(studentKey => {
+                    const student = statsData.students[studentKey];
+                    
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${student.number}</td>
+                        <td>${student.count}</td>
+                    `;
+                    
+                    // 根據參與次數添加顏色標識
+                    if (student.count === statsData.sessions) {
+                        row.style.backgroundColor = '#e6f4ea'; // 全勤
+                    } else if (student.count >= statsData.sessions * 0.7) {
+                        row.style.backgroundColor = '#fef7e0'; // 高參與率
+                    }
+                    
+                    tbody.appendChild(row);
+                });
+                
+                table.appendChild(tbody);
+                statsContainer.appendChild(table);
+            });
+            
+            // 如果沒有數據
+            if (sortedClasses.length === 0) {
+                statsContainer.innerHTML = '<div class="status info">未找到有效的考勤數據</div>';
+            }
+        }
+        
+        // 匯出統計結果為Excel
+        function exportStatsToExcel() {
+            if (Object.keys(statsData.students).length === 0) {
+                showStatus('暫無統計數據可匯出', 'error');
+                return;
+            }
+            
+            const wb = XLSX.utils.book_new();
+            
+            // 創建詳細統計工作表
+            const detailedData = [
+                ['班別', '學號', '參與次數', '參與活動代碼']  // 表頭
+            ];
+            
+            // 按班別和學號排序
+            const sortedStudents = Object.keys(statsData.students).sort((a, b) => {
+                const studentA = statsData.students[a];
+                const studentB = statsData.students[b];
+                
+                // 先按班別排序
+                const classCompare = sortClass(studentA.class, studentB.class);
+                if (classCompare !== 0) return classCompare;
+                
+                // 班別相同則按學號排序
+                return sortNumber(studentA.number, studentB.number);
+            });
+            
+            // 添加詳細數據
+            sortedStudents.forEach(key => {
+                const student = statsData.students[key];
+                // 將參與活動代碼列表轉換為逗號分隔的字符串
+                const attendedSessionsStr = student.attendedSessions.join(', ');
+                
+                detailedData.push([
+                    student.class,
+                    student.number,
+                    student.count,
+                    attendedSessionsStr
+                ]);
+            });
+            
+            const detailedWs = XLSX.utils.aoa_to_sheet(detailedData);
+            XLSX.utils.book_append_sheet(wb, detailedWs, '參與次數統計');
+            
+            // 生成並下載Excel文件
+            const fileName = `參與次數統計_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            showStatus('統計結果Excel文件已生成並開始下載', 'success');
         }
         
         // 清除所有數據
