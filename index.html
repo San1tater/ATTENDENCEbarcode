@@ -315,7 +315,7 @@
                         <ul>
                             <li>第一列：學生證號 (8位數字)</li>
                             <li>第二列：班別 (例如: P1A)</li>
-                            <li>第三列：學號 (例如: 01)</li>
+                            <li>第三列：學號 (例如: 1 或 01)</li>
                         </ul>
                     </div>
                 </div>
@@ -342,7 +342,7 @@
             <div class="manual-input">
                 <label for="manual-input">手動輸入</label>
                 <input type="text" id="manual-input" placeholder="可輸入學生證號 或 班別 學號 (如: P2D 1)">
-                <div class="manual-input-format">支援格式：學生證號 (8位數字) 或 班別+空格+學號 (如: P2D 1)</div>
+                <div class="manual-input-format">支援格式：學生證號 (8位數字) 或 班別+空格+學號 (如: P2A 1)</div>
                 <button id="manual-submit" class="secondary">手動登記</button>
             </div>
             
@@ -440,13 +440,14 @@
         // 解析班別學號格式
         function parseClassNumber(input) {
             // 格式：班別 學號，如 "P2D 1" 或 "P2D 01"
+            // 支持單數和雙數學號格式
             const pattern = /^([A-Za-z][0-9][A-Za-z])\s+([0-9]{1,2})$/;
             const match = input.match(pattern);
             
             if (match) {
                 return {
                     class: match[1].toUpperCase(),
-                    number: match[2].padStart(2, '0')
+                    number: match[2] // 保持原樣，不進行補零
                 };
             }
             return null;
@@ -485,9 +486,17 @@
                         if (row.studentId && row.class && row.number) {
                             // 驗證學生證號格式
                             if (isValidStudentId(row.studentId)) {
-                                const classNumber = `${row.class} ${row.number}`;
+                                // 將學號轉換為字符串，移除前導零
+                                const numberStr = String(parseInt(row.number));
+                                const classNumber = `${row.class} ${numberStr}`;
                                 newMapping[row.studentId] = classNumber;
                                 newReverseMapping[classNumber] = row.studentId;
+                                
+                                // 同時創建補零版本的反向映射
+                                const numberPadded = numberStr.padStart(2, '0');
+                                const classNumberPadded = `${row.class} ${numberPadded}`;
+                                newReverseMapping[classNumberPadded] = row.studentId;
+                                
                                 validCount++;
                             }
                         }
@@ -529,7 +538,18 @@
         function updateReverseMapping() {
             reverseMapping = {};
             for (const studentId in studentMapping) {
-                reverseMapping[studentMapping[studentId]] = studentId;
+                const classNumber = studentMapping[studentId];
+                reverseMapping[classNumber] = studentId;
+                
+                // 同時創建補零版本的反向映射
+                const parts = classNumber.split(' ');
+                if (parts.length === 2) {
+                    const classPart = parts[0];
+                    const numberPart = parts[1];
+                    const numberPadded = numberPart.padStart(2, '0');
+                    const classNumberPadded = `${classPart} ${numberPadded}`;
+                    reverseMapping[classNumberPadded] = studentId;
+                }
             }
         }
         
@@ -541,6 +561,15 @@
         // 根據班別學號獲取學生證號
         function getStudentIdByClassNumber(classNumber) {
             return reverseMapping[classNumber] || null;
+        }
+        
+        // 檢查學生是否已在當前活動中登記
+        function isStudentAlreadyRegistered(studentId) {
+            if (!currentSessionId || !attendanceData[currentSessionId]) {
+                return false;
+            }
+            
+            return attendanceData[currentSessionId].some(record => record.studentId === studentId);
         }
         
         // 開始掃描
@@ -646,51 +675,51 @@
             
             const displayName = getDisplayName(code);
             
-            // 不驗證學生編號格式，直接使用掃描到的內容
-            if (!scannedStudents.has(code)) {
-                // 記錄考勤
-                const timestamp = new Date().toLocaleString('zh-TW');
-                const record = {
-                    studentId: code,
-                    displayName: displayName,
-                    timestamp: timestamp,
-                    // 分離班別和學號
-                    class: null,
-                    number: null
-                };
-                
-                // 如果有映射，分離班別和學號
-                if (studentMapping[code]) {
-                    const classNumber = studentMapping[code];
-                    const parts = classNumber.split(' ');
-                    if (parts.length === 2) {
-                        record.class = parts[0];
-                        record.number = parts[1];
-                    }
-                }
-                
-                // 將新記錄添加到數組開頭
-                attendanceData[currentSessionId].unshift(record);
-                
-                // 保存到本地存儲
-                localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
-                
-                scannedStudents.add(code);
-                updateAttendanceList();
-                updateSessionSelect();
-                
-                scanResult.innerHTML = `<div class="status success">已登記: ${displayName} - ${timestamp}</div>`;
-                
-                // 短暫顯示成功信息
-                setTimeout(() => {
-                    scanResult.innerHTML = '';
-                }, 2000);
-            } else {
+            // 檢查是否已經登記
+            if (isStudentAlreadyRegistered(code)) {
                 scanResult.innerHTML = `<div class="status info">已登記過: ${displayName}</div>`;
                 setTimeout(() => {
                     scanResult.innerHTML = '';
                 }, 2000);
+                return;
             }
+            
+            // 記錄考勤
+            const timestamp = new Date().toLocaleString('zh-TW');
+            const record = {
+                studentId: code,
+                displayName: displayName,
+                timestamp: timestamp,
+                // 分離班別和學號
+                class: null,
+                number: null
+            };
+            
+            // 如果有映射，分離班別和學號
+            if (studentMapping[code]) {
+                const classNumber = studentMapping[code];
+                const parts = classNumber.split(' ');
+                if (parts.length === 2) {
+                    record.class = parts[0];
+                    record.number = parts[1];
+                }
+            }
+            
+            // 將新記錄添加到數組開頭
+            attendanceData[currentSessionId].unshift(record);
+            
+            // 保存到本地存儲
+            localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
+            
+            updateAttendanceList();
+            updateSessionSelect();
+            
+            scanResult.innerHTML = `<div class="status success">已登記: ${displayName} - ${timestamp}</div>`;
+            
+            // 短暫顯示成功信息
+            setTimeout(() => {
+                scanResult.innerHTML = '';
+            }, 2000);
         }
         
         // 手動提交學生編號
@@ -708,6 +737,11 @@
                 return;
             }
             
+            // 初始化活動數據
+            if (!attendanceData[currentSessionId]) {
+                attendanceData[currentSessionId] = [];
+            }
+            
             let studentId = null;
             let displayName = null;
             
@@ -717,19 +751,42 @@
                 displayName = getDisplayName(studentId);
             } 
             // 檢查是否是班別學號格式
-            else if (parseClassNumber(input)) {
+            else {
                 const parsed = parseClassNumber(input);
-                const classNumber = `${parsed.class} ${parsed.number}`;
-                studentId = getStudentIdByClassNumber(classNumber);
-                
-                if (studentId) {
-                    displayName = classNumber;
+                if (parsed) {
+                    // 嘗試多種格式查找
+                    const formatsToTry = [
+                        `${parsed.class} ${parsed.number}`, // 原始格式
+                        `${parsed.class} ${parsed.number.padStart(2, '0')}`, // 補零格式
+                    ];
+                    
+                    for (const format of formatsToTry) {
+                        studentId = getStudentIdByClassNumber(format);
+                        if (studentId) {
+                            displayName = format;
+                            break;
+                        }
+                    }
+                    
+                    if (!studentId) {
+                        showStatus(`未找到對應的學生證號: ${parsed.class} ${parsed.number}，請先載入映射文件`, 'error');
+                        return;
+                    }
                 } else {
-                    showStatus(`未找到對應的學生證號: ${classNumber}，請先載入映射文件`, 'error');
+                    showStatus(`無效輸入格式: ${input} (必須是8位數字、3位英文字母 或 班別 學號格式如: P2D 1)`, 'error');
                     return;
                 }
-            } else {
-                showStatus(`無效輸入格式: ${input} (必須是8位數字、3位英文字母 或 班別 學號格式如: P2D 1)`, 'error');
+            }
+            
+            // 檢查是否已經登記
+            if (isStudentAlreadyRegistered(studentId)) {
+                const scanResult = document.getElementById('scan-result');
+                scanResult.innerHTML = `<div class="status info">已登記過: ${displayName}</div>`;
+                setTimeout(() => {
+                    scanResult.innerHTML = '';
+                }, 2000);
+                
+                manualInput.value = '';
                 return;
             }
             
@@ -755,7 +812,8 @@
                 const parts = displayName.split(' ');
                 if (parts.length === 2) {
                     record.class = parts[0];
-                    record.number = parts[1];
+                    // 移除前導零
+                    record.number = String(parseInt(parts[1]));
                 }
             }
             
@@ -765,7 +823,6 @@
             // 保存到本地存儲
             localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
             
-            scannedStudents.add(studentId);
             updateAttendanceList();
             updateSessionSelect();
             
