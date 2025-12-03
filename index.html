@@ -477,6 +477,8 @@
             </div>
             
             <button id="export-excel" class="secondary">匯出為Excel</button>
+            <!-- 新增刪除所有活動按鈕 -->
+            <button id="delete-all-sessions" class="danger" style="margin-top: 10px;">刪除所有活動</button>
             
             <h2 style="margin-top: 30px;">4. 參與次數統計</h2>
             <div class="form-group">
@@ -554,6 +556,9 @@
             
             // 刪除活動按鈕事件
             document.getElementById('delete-session').addEventListener('click', deleteSession);
+            
+            // 刪除所有活動按鈕事件
+            document.getElementById('delete-all-sessions').addEventListener('click', deleteAllSessions);
             
             // 生成統計按鈕事件
             document.getElementById('generate-stats').addEventListener('click', generateAttendanceStats);
@@ -1446,6 +1451,95 @@
                 
                 showStatus(`活動 "${sessionId}" 已刪除`, 'success');
                 document.body.removeChild(dialogOverlay);
+            });
+            
+            // 點擊背景關閉
+            dialogOverlay.addEventListener('click', function(e) {
+                if (e.target === dialogOverlay) {
+                    document.body.removeChild(dialogOverlay);
+                }
+            });
+        }
+        
+        // 刪除所有活動
+        function deleteAllSessions() {
+            if (Object.keys(attendanceData).length === 0) {
+                showStatus('暫無活動可刪除', 'info');
+                return;
+            }
+            
+            // 創建對話框
+            const dialogOverlay = document.createElement('div');
+            dialogOverlay.className = 'dialog-overlay';
+            
+            const dialog = document.createElement('div');
+            dialog.className = 'dialog';
+            
+            dialog.innerHTML = `
+                <h3>刪除所有活動</h3>
+                <div class="form-group">
+                    <p><strong>警告！此操作將刪除所有活動及所有考勤記錄，且無法恢復！</strong></p>
+                    <p>活動數量: ${Object.keys(attendanceData).length} 個</p>
+                    <p>總記錄數: ${Object.values(attendanceData).reduce((total, session) => total + session.length, 0)} 條</p>
+                    <br>
+                    <p>請輸入驗證碼 <strong>"QRSC"</strong> 以確認刪除所有活動:</p>
+                    <input type="text" id="verification-code" placeholder="輸入 QRSC 確認刪除">
+                </div>
+                <div class="dialog-buttons">
+                    <button id="cancel-delete-all" class="secondary">取消</button>
+                    <button id="confirm-delete-all" class="danger">確認刪除所有活動</button>
+                </div>
+            `;
+            
+            dialogOverlay.appendChild(dialog);
+            document.body.appendChild(dialogOverlay);
+            
+            // 設置焦點到驗證碼輸入框
+            setTimeout(() => {
+                document.getElementById('verification-code').focus();
+            }, 100);
+            
+            // 取消按鈕事件
+            document.getElementById('cancel-delete-all').addEventListener('click', function() {
+                document.body.removeChild(dialogOverlay);
+            });
+            
+            // 確認按鈕事件
+            document.getElementById('confirm-delete-all').addEventListener('click', function() {
+                const verificationCode = document.getElementById('verification-code').value.trim();
+                
+                if (verificationCode !== 'QRSC') {
+                    showStatus('驗證碼錯誤，請輸入 QRSC 確認刪除', 'error');
+                    document.getElementById('verification-code').focus();
+                    document.getElementById('verification-code').select();
+                    return;
+                }
+                
+                // 刪除所有活動數據
+                attendanceData = {};
+                
+                // 更新本地存儲
+                localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
+                
+                // 重置當前活動
+                currentSessionId = '';
+                document.getElementById('session-id').value = '';
+                
+                // 更新UI
+                updateSessionSelect();
+                document.getElementById('session-select').value = '';
+                showSessionRecords();
+                updateAttendanceList();
+                
+                showStatus('所有活動及記錄已刪除', 'success');
+                document.body.removeChild(dialogOverlay);
+            });
+            
+            // 回車鍵確認
+            document.getElementById('verification-code').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    document.getElementById('confirm-delete-all').click();
+                }
             });
             
             // 點擊背景關閉
