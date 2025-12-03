@@ -396,7 +396,7 @@
             <h2>2. 登記考勤</h2>
             <div class="form-group">
                 <label for="session-id">本次考勤識別碼</label>
-                <input type="text" id="session-id" placeholder="例如：2024-03-20-活動1">
+                <input type="text" id="session-id" placeholder="例如：PTH 1202">
             </div>
             
             <button id="start-scan">開始掃描</button>
@@ -467,7 +467,7 @@
     </div>
     
     <footer>
-        <p>普通話活動室考勤系統 &copy; 2024 - Code128條形碼掃描版</p>
+        <p>普通話活動室考勤系統 &copy; 2025 - Code128條形碼掃描版</p>
     </footer>
 
     <script>
@@ -875,7 +875,7 @@
             
             // 驗證學生證號格式
             if (!isValidStudentId(code)) {
-                scanResult.innerHTML = `<div class="status error">無效學生證號: ${code} (必須是8位數字或3位英文字母)</div>`;
+                scanResult.innerHTML = `<div class="status error">無效學生證號: ${code} (必須是8位數字)</div>`;
                 setTimeout(() => {
                     scanResult.innerHTML = '';
                 }, 3000);
@@ -982,7 +982,7 @@
                         return;
                     }
                 } else {
-                    showStatus(`無效輸入格式: ${input} (必須是8位數字、3位英文字母 或 班別 學號格式如: P2D 1)`, 'error');
+                    showStatus(`無效輸入格式: ${input} (必須是8位數字 或 班別 學號，格式如: P1A 1)`, 'error');
                     return;
                 }
             }
@@ -1001,7 +1001,7 @@
             
             // 驗證學生證號格式
             if (!isValidStudentId(studentId)) {
-                showStatus(`無效學生證號: ${studentId} (必須是8位數字或3位英文字母)`, 'error');
+                showStatus(`無效學生證號: ${studentId} (必須是8位數字)`, 'error');
                 return;
             }
             
