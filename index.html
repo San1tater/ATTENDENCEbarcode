@@ -60,6 +60,11 @@
             border-bottom: 2px solid #f0f0f0;
         }
         
+        /* 調整登記考勤模塊的上間距 */
+        .panel h2:nth-of-type(2) {
+            margin-top: 25px;
+        }
+        
         .form-group {
             margin-bottom: 15px;
         }
@@ -192,6 +197,7 @@
             border-bottom: 1px solid #eee;
             display: flex;
             justify-content: space-between;
+            align-items: center;
         }
         
         .record-item:first-child {
@@ -365,6 +371,26 @@
             margin-top: 15px;
         }
         
+        .delete-record-btn {
+            background-color: #ea4335;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 4px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        
+        .delete-record-btn:hover {
+            background-color: #d32f2f;
+        }
+        
+        .record-actions {
+            display: flex;
+            gap: 5px;
+        }
+        
         @media (max-width: 768px) {
             .container {
                 flex-direction: column;
@@ -372,6 +398,16 @@
             
             .management-buttons {
                 flex-direction: column;
+            }
+            
+            .record-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .record-actions {
+                margin-top: 5px;
+                align-self: flex-end;
             }
         }
     </style>
@@ -389,14 +425,6 @@
                 <div class="form-group">
                     <label for="mapping-file">上傳學生編號映射文件 (Excel格式)</label>
                     <input type="file" id="mapping-file" accept=".xlsx, .xls">
-                    <div class="mapping-info">
-                        <p>Excel文件格式要求：</p>
-                        <ul>
-                            <li>第一列：學生證號 (8位數字)</li>
-                            <li>第二列：班別 (例如: P1A)</li>
-                            <li>第三列：學號 (例如: 1)</li>
-                        </ul>
-                    </div>
                 </div>
                 <button id="load-mapping" class="secondary">載入映射文件</button>
                 <div id="mapping-status" class="mapping-info"></div>
@@ -452,8 +480,6 @@
                 <button id="cleanup-data" class="warning">清理數據（學號去零 & 去重）</button>
                 <button id="export-excel" class="secondary">匯出為Excel</button>
             </div>
-            
-            <button id="clear-data" class="danger">清除所有數據</button>
             
             <h2 style="margin-top: 30px;">4. 參與次數統計</h2>
             <div class="form-group">
@@ -523,11 +549,10 @@
             // 匯出Excel按鈕事件
             document.getElementById('export-excel').addEventListener('click', exportToExcel);
             
-            // 清除數據按鈕事件
-            document.getElementById('clear-data').addEventListener('click', clearAllData);
-            
             // 清理數據按鈕事件
-            document.getElementById('cleanup-data').addEventListener('click', cleanupData);
+            document.getElementById('cleanup-data').addEventListener('click', function() {
+                showCleanupDataDialog();
+            });
             
             // 活動選擇變化事件
             document.getElementById('session-select').addEventListener('change', showSessionRecords);
@@ -551,6 +576,57 @@
             // 檢查並更新載入映射文件按鈕狀態
             updateLoadMappingButton();
         });
+        
+        // 顯示清理數據確認對話框
+        function showCleanupDataDialog() {
+            if (Object.keys(attendanceData).length === 0) {
+                showStatus('暫無考勤記錄可清理', 'info');
+                return;
+            }
+            
+            const dialogOverlay = document.createElement('div');
+            dialogOverlay.className = 'dialog-overlay';
+            
+            const dialog = document.createElement('div');
+            dialog.className = 'dialog';
+            
+            dialog.innerHTML = `
+                <h3>清理數據</h3>
+                <div class="form-group">
+                    <p>確定要清理數據嗎？此操作將：</p>
+                    <ul>
+                        <li>將學號從"01"格式改為"1"格式</li>
+                        <li>移除同一活動中重複的登記，只保留最晚的一個</li>
+                    </ul>
+                    <p>此操作不可恢復！</p>
+                </div>
+                <div class="dialog-buttons">
+                    <button id="cancel-cleanup" class="secondary">取消</button>
+                    <button id="confirm-cleanup" class="warning">確認清理</button>
+                </div>
+            `;
+            
+            dialogOverlay.appendChild(dialog);
+            document.body.appendChild(dialogOverlay);
+            
+            // 取消按鈕事件
+            document.getElementById('cancel-cleanup').addEventListener('click', function() {
+                document.body.removeChild(dialogOverlay);
+            });
+            
+            // 確認按鈕事件
+            document.getElementById('confirm-cleanup').addEventListener('click', function() {
+                document.body.removeChild(dialogOverlay);
+                cleanupData();
+            });
+            
+            // 點擊背景關閉
+            dialogOverlay.addEventListener('click', function(e) {
+                if (e.target === dialogOverlay) {
+                    document.body.removeChild(dialogOverlay);
+                }
+            });
+        }
         
         // 更新載入映射文件按鈕狀態
         function updateLoadMappingButton() {
@@ -713,15 +789,6 @@
         
         // 清理數據：將學號從"01"格式改為"1"格式，並移除同一活動中重複的登記
         function cleanupData() {
-            if (Object.keys(attendanceData).length === 0) {
-                showStatus('暫無考勤記錄可清理', 'info');
-                return;
-            }
-            
-            if (!confirm('確定要清理數據嗎？此操作將：\n1. 將學號從"01"格式改為"1"格式\n2. 移除同一活動中重複的登記，只保留最晚的一個\n此操作不可恢復！')) {
-                return;
-            }
-            
             let totalCleanedRecords = 0;
             let totalRemovedDuplicates = 0;
             
@@ -735,7 +802,6 @@
                 
                 // 用於跟蹤每個學生的最新記錄
                 const latestRecords = {};
-                const cleanedRecords = [];
                 
                 // 首先處理每條記錄，將學號格式標準化
                 const processedRecords = sessionRecords.map(record => {
@@ -1140,6 +1206,88 @@
             });
         }
         
+        // 刪除特定記錄
+        function deleteSpecificRecord(sessionId, index) {
+            if (!sessionId || !attendanceData[sessionId] || index < 0 || index >= attendanceData[sessionId].length) {
+                showStatus('無效的記錄索引', 'error');
+                return;
+            }
+            
+            // 獲取要刪除的記錄信息
+            const recordToDelete = attendanceData[sessionId][index];
+            
+            // 創建刪除記錄確認對話框
+            const dialogOverlay = document.createElement('div');
+            dialogOverlay.className = 'dialog-overlay';
+            
+            const dialog = document.createElement('div');
+            dialog.className = 'dialog';
+            
+            dialog.innerHTML = `
+                <h3>刪除記錄</h3>
+                <div class="form-group">
+                    <p>確定要刪除以下記錄嗎？</p>
+                    <p><strong>${recordToDelete.displayName}</strong></p>
+                    <p>登記時間: ${recordToDelete.timestamp}</p>
+                    <p>此操作不可恢復！</p>
+                </div>
+                <div class="dialog-buttons">
+                    <button id="cancel-delete-record" class="secondary">取消</button>
+                    <button id="confirm-delete-record" class="danger">確認刪除</button>
+                </div>
+            `;
+            
+            dialogOverlay.appendChild(dialog);
+            document.body.appendChild(dialogOverlay);
+            
+            // 取消按鈕事件
+            document.getElementById('cancel-delete-record').addEventListener('click', function() {
+                document.body.removeChild(dialogOverlay);
+            });
+            
+            // 確認按鈕事件
+            document.getElementById('confirm-delete-record').addEventListener('click', function() {
+                document.body.removeChild(dialogOverlay);
+                performDeleteRecord(sessionId, index, recordToDelete);
+            });
+            
+            // 點擊背景關閉
+            dialogOverlay.addEventListener('click', function(e) {
+                if (e.target === dialogOverlay) {
+                    document.body.removeChild(dialogOverlay);
+                }
+            });
+        }
+        
+        // 執行刪除記錄操作
+        function performDeleteRecord(sessionId, index, recordToDelete) {
+            // 從數組中刪除記錄
+            attendanceData[sessionId].splice(index, 1);
+            
+            // 保存到本地存儲
+            localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
+            
+            // 如果該活動已無記錄，刪除整個活動並返回選擇活動狀態
+            if (attendanceData[sessionId].length === 0) {
+                delete attendanceData[sessionId];
+                updateSessionSelect();
+                document.getElementById('session-select').value = '';
+                showSessionRecords();
+            } else {
+                // 活動還有記錄，更新活動選擇下拉框並保持選中該活動
+                updateSessionSelect();
+                document.getElementById('session-select').value = sessionId;
+                showSessionRecords();
+            }
+            
+            // 如果當前活動是被刪除記錄的活動，更新考勤列表
+            if (currentSessionId === sessionId) {
+                updateAttendanceList();
+            }
+            
+            showStatus(`記錄已刪除: ${recordToDelete.displayName}`, 'success');
+        }
+        
         // 顯示活動記錄
         function showSessionRecords() {
             const sessionId = document.getElementById('session-select').value;
@@ -1159,17 +1307,30 @@
                 header.innerHTML = `
                     <span>學生編號</span>
                     <span>登記時間</span>
+                    <span>操作</span>
                 `;
                 recordsList.appendChild(header);
                 
-                sortedRecords.forEach(record => {
+                sortedRecords.forEach((record, index) => {
                     const item = document.createElement('div');
                     item.className = 'record-item';
                     item.innerHTML = `
                         <span>${record.displayName}</span>
                         <span>${record.timestamp}</span>
+                        <div class="record-actions">
+                            <button class="delete-record-btn" data-index="${index}">刪除</button>
+                        </div>
                     `;
                     recordsList.appendChild(item);
+                });
+                
+                // 為刪除按鈕添加事件監聽
+                const deleteButtons = recordsList.querySelectorAll('.delete-record-btn');
+                deleteButtons.forEach(button => {
+                    button.addEventListener('click', function() {
+                        const index = parseInt(this.getAttribute('data-index'));
+                        deleteSpecificRecord(sessionId, index);
+                    });
                 });
                 
                 // 顯示統計信息
@@ -1360,6 +1521,9 @@
                 
                 // 更新UI
                 updateSessionSelect();
+                
+                // 選擇新活動並刷新列表
+                document.getElementById('session-select').value = newSessionId;
                 showSessionRecords();
                 
                 // 如果當前活動是正在掃描的活動，更新currentSessionId
@@ -1368,9 +1532,6 @@
                     document.getElementById('session-id').value = newSessionId;
                     updateAttendanceList();
                 }
-                
-                // 選擇新活動
-                document.getElementById('session-select').value = newSessionId;
                 
                 showStatus(`活動已重命名為: ${newSessionId}`, 'success');
                 document.body.removeChild(dialogOverlay);
@@ -1698,18 +1859,6 @@
             const fileName = `參與次數統計_${new Date().toISOString().slice(0, 10)}.xlsx`;
             XLSX.writeFile(wb, fileName);
             showStatus('統計結果Excel文件已生成並開始下載', 'success');
-        }
-        
-        // 清除所有數據
-        function clearAllData() {
-            if (confirm('確定要清除所有考勤數據嗎？此操作不可恢復！')) {
-                attendanceData = {};
-                localStorage.removeItem('attendanceData');
-                updateSessionSelect();
-                document.getElementById('records-list').innerHTML = '<div class="status info">數據已清除</div>';
-                document.getElementById('attendance-list').innerHTML = '<div class="status info">暫無考勤記錄</div>';
-                showStatus('所有數據已清除', 'success');
-            }
         }
         
         // 顯示狀態信息
