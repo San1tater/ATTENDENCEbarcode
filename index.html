@@ -1566,6 +1566,15 @@
             // 清空容器
             statsContainer.innerHTML = '';
             
+            // 找出所有學生中的最高參與次數
+            let maxCount = 0;
+            for (const studentKey in statsData.students) {
+                const student = statsData.students[studentKey];
+                if (student.count > maxCount) {
+                    maxCount = student.count;
+                }
+            }
+            
             // 按班別排序
             const sortedClasses = Object.keys(statsData.summary).sort(sortClass);
             
@@ -1616,15 +1625,17 @@
                     `;
                     
                     // 根據參與次數添加不同底色標示
-                    // 新配色邏輯：最低檔無底色，中檔淺黃色，最高檔淺綠色
-                    if (student.count === statsData.sessions) {
-                        // 最高檔：全勤（100%）- 淺綠色
-                        row.style.backgroundColor = '#e6f4ea';
-                    } else if (student.count >= Math.ceil(statsData.sessions / 2)) {
-                        // 中檔：參與次數達到總活動數一半以上 - 淺黃色
-                        row.style.backgroundColor = '#fef7e0';
+                    // 新配色邏輯：以整個統計中的最高登記數為基準
+                    if (maxCount > 0) {
+                        if (student.count === maxCount) {
+                            // 最高檔：達到最高登記數 - 淺綠色
+                            row.style.backgroundColor = '#e6f4ea';
+                        } else if (student.count >= Math.ceil(maxCount / 2)) {
+                            // 中檔：達到最高登記數的一半或以上 - 淺黃色
+                            row.style.backgroundColor = '#fef7e0';
+                        }
+                        // 最低檔：低於最高登記數的一半 - 無底色（保持原樣）
                     }
-                    // 最低檔：參與次數低於總活動數一半 - 無底色（保持原樣）
                     
                     tbody.appendChild(row);
                 });
