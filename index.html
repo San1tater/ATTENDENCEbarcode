@@ -449,7 +449,7 @@
             <div class="manual-input">
                 <label for="manual-input">手動輸入</label>
                 <input type="text" id="manual-input" placeholder="可輸入學生證號 或 班別 學號 (如: P1A 1)">
-                <div class="manual-input-format">支援格式：學生證號 (8位數字) 或 班別+空格+學號 (如: P1A 1)</div>
+                <div class="manual-input-format">支援格式：學生證號 (8位數字) 或 班別+空格+學號 (如: P1A 1)，學號不允許補零格式</div>
                 <button id="manual-submit" class="secondary">手動登記</button>
             </div>
             
@@ -476,10 +476,7 @@
                 <div class="status info">請選擇活動或該活動暫無記錄</div>
             </div>
             
-            <div class="management-buttons">
-                <button id="cleanup-data" class="warning">清理數據（學號去零 & 去重）</button>
-                <button id="export-excel" class="secondary">匯出為Excel</button>
-            </div>
+            <button id="export-excel" class="secondary">匯出為Excel</button>
             
             <h2 style="margin-top: 30px;">4. 參與次數統計</h2>
             <div class="form-group">
@@ -549,11 +546,6 @@
             // 匯出Excel按鈕事件
             document.getElementById('export-excel').addEventListener('click', exportToExcel);
             
-            // 清理數據按鈕事件
-            document.getElementById('cleanup-data').addEventListener('click', function() {
-                showCleanupDataDialog();
-            });
-            
             // 活動選擇變化事件
             document.getElementById('session-select').addEventListener('change', showSessionRecords);
             
@@ -576,57 +568,6 @@
             // 檢查並更新載入映射文件按鈕狀態
             updateLoadMappingButton();
         });
-        
-        // 顯示清理數據確認對話框
-        function showCleanupDataDialog() {
-            if (Object.keys(attendanceData).length === 0) {
-                showStatus('暫無考勤記錄可清理', 'info');
-                return;
-            }
-            
-            const dialogOverlay = document.createElement('div');
-            dialogOverlay.className = 'dialog-overlay';
-            
-            const dialog = document.createElement('div');
-            dialog.className = 'dialog';
-            
-            dialog.innerHTML = `
-                <h3>清理數據</h3>
-                <div class="form-group">
-                    <p>確定要清理數據嗎？此操作將：</p>
-                    <ul>
-                        <li>將學號從"01"格式改為"1"格式</li>
-                        <li>移除同一活動中重複的登記，只保留最晚的一個</li>
-                    </ul>
-                    <p>此操作不可恢復！</p>
-                </div>
-                <div class="dialog-buttons">
-                    <button id="cancel-cleanup" class="secondary">取消</button>
-                    <button id="confirm-cleanup" class="warning">確認清理</button>
-                </div>
-            `;
-            
-            dialogOverlay.appendChild(dialog);
-            document.body.appendChild(dialogOverlay);
-            
-            // 取消按鈕事件
-            document.getElementById('cancel-cleanup').addEventListener('click', function() {
-                document.body.removeChild(dialogOverlay);
-            });
-            
-            // 確認按鈕事件
-            document.getElementById('confirm-cleanup').addEventListener('click', function() {
-                document.body.removeChild(dialogOverlay);
-                cleanupData();
-            });
-            
-            // 點擊背景關閉
-            dialogOverlay.addEventListener('click', function(e) {
-                if (e.target === dialogOverlay) {
-                    document.body.removeChild(dialogOverlay);
-                }
-            });
-        }
         
         // 更新載入映射文件按鈕狀態
         function updateLoadMappingButton() {
@@ -651,17 +592,25 @@
             return pattern.test(studentId);
         }
         
-        // 解析班別學號格式
+        // 解析班別學號格式（禁止補零格式）
         function parseClassNumber(input) {
-            // 格式：班別 學號，如 "P1A 1" 或 "P1A 01"
-            // 支持單數和雙數學號格式
+            // 格式：班別 學號，如 "P1A 1" 或 "P1A 10"
+            // 禁止補零格式：如 "P1A 01" 不被允許
             const pattern = /^([A-Za-z][0-9][A-Za-z])\s+([0-9]{1,2})$/;
             const match = input.match(pattern);
             
             if (match) {
+                const classPart = match[1].toUpperCase();
+                const numberPart = match[2];
+                
+                // 檢查學號部分：不允許以0開頭（除非學號是0，但學號不會是0）
+                if (numberPart.length > 1 && numberPart.startsWith('0')) {
+                    return null; // 禁止補零格式
+                }
+                
                 return {
-                    class: match[1].toUpperCase(),
-                    number: match[2] // 保持原樣，不進行補零
+                    class: classPart,
+                    number: numberPart
                 };
             }
             return null;
@@ -700,16 +649,11 @@
                         if (row.studentId && row.class && row.number) {
                             // 驗證學生證號格式
                             if (isValidStudentId(row.studentId)) {
-                                // 將學號轉換為字符串，移除前導零
+                                // 將學號轉換為字符串，移除前導零（映射文件中已經沒有補零格式）
                                 const numberStr = String(parseInt(row.number));
                                 const classNumber = `${row.class} ${numberStr}`;
                                 newMapping[row.studentId] = classNumber;
                                 newReverseMapping[classNumber] = row.studentId;
-                                
-                                // 同時創建補零版本的反向映射
-                                const numberPadded = numberStr.padStart(2, '0');
-                                const classNumberPadded = `${row.class} ${numberPadded}`;
-                                newReverseMapping[classNumberPadded] = row.studentId;
                                 
                                 validCount++;
                             }
@@ -755,16 +699,6 @@
             for (const studentId in studentMapping) {
                 const classNumber = studentMapping[studentId];
                 reverseMapping[classNumber] = studentId;
-                
-                // 同時創建補零版本的反向映射
-                const parts = classNumber.split(' ');
-                if (parts.length === 2) {
-                    const classPart = parts[0];
-                    const numberPart = parts[1];
-                    const numberPadded = numberPart.padStart(2, '0');
-                    const classNumberPadded = `${classPart} ${numberPadded}`;
-                    reverseMapping[classNumberPadded] = studentId;
-                }
             }
         }
         
@@ -785,95 +719,6 @@
             }
             
             return attendanceData[currentSessionId].some(record => record.studentId === studentId);
-        }
-        
-        // 清理數據：將學號從"01"格式改為"1"格式，並移除同一活動中重複的登記
-        function cleanupData() {
-            let totalCleanedRecords = 0;
-            let totalRemovedDuplicates = 0;
-            
-            // 遍歷所有活動
-            for (const sessionId in attendanceData) {
-                const sessionRecords = attendanceData[sessionId];
-                
-                if (!sessionRecords || sessionRecords.length === 0) {
-                    continue;
-                }
-                
-                // 用於跟蹤每個學生的最新記錄
-                const latestRecords = {};
-                
-                // 首先處理每條記錄，將學號格式標準化
-                const processedRecords = sessionRecords.map(record => {
-                    const cleanedRecord = {...record};
-                    
-                    // 處理學號：將"01"格式改為"1"格式
-                    if (cleanedRecord.number) {
-                        // 如果是數字字符串，移除前導零
-                        if (/^\d+$/.test(cleanedRecord.number)) {
-                            const originalNumber = cleanedRecord.number;
-                            cleanedRecord.number = String(parseInt(cleanedRecord.number, 10));
-                            
-                            if (originalNumber !== cleanedRecord.number) {
-                                totalCleanedRecords++;
-                            }
-                        }
-                    }
-                    
-                    // 更新displayName以反映新的學號格式
-                    if (cleanedRecord.class && cleanedRecord.number) {
-                        cleanedRecord.displayName = `${cleanedRecord.class} ${cleanedRecord.number}`;
-                    }
-                    
-                    return cleanedRecord;
-                });
-                
-                // 按時間排序（從早到晚），以便保留最晚的記錄
-                const sortedRecords = [...processedRecords].sort((a, b) => {
-                    return new Date(a.timestamp) - new Date(b.timestamp);
-                });
-                
-                // 遍歷排序後的記錄，保留每個學生的最新記錄
-                for (const record of sortedRecords) {
-                    const studentId = record.studentId;
-                    
-                    // 如果已經有該學生的記錄，用當前的記錄替換（因為是按時間排序的，所以後面的會更晚）
-                    if (latestRecords[studentId]) {
-                        totalRemovedDuplicates++;
-                    }
-                    
-                    latestRecords[studentId] = record;
-                }
-                
-                // 將最新的記錄轉換為數組
-                const uniqueRecords = Object.values(latestRecords);
-                
-                // 按時間倒序排列（最新的在最前面）
-                uniqueRecords.sort((a, b) => {
-                    return new Date(b.timestamp) - new Date(a.timestamp);
-                });
-                
-                // 更新該活動的記錄
-                attendanceData[sessionId] = uniqueRecords;
-            }
-            
-            // 保存到本地存儲
-            localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
-            
-            // 更新UI
-            updateSessionSelect();
-            showSessionRecords();
-            
-            if (currentSessionId && attendanceData[currentSessionId]) {
-                updateAttendanceList();
-            }
-            
-            // 顯示清理結果
-            const message = `數據清理完成！\n` +
-                           `- 標準化 ${totalCleanedRecords} 個學號格式\n` +
-                           `- 移除 ${totalRemovedDuplicates} 個重複登記`;
-            
-            showStatus(message, 'success');
         }
         
         // 開始掃描
@@ -1026,7 +871,7 @@
             }, 2000);
         }
         
-        // 手動提交學生編號
+        // 手動提交學生編號（禁止補零格式）
         function manualSubmit() {
             const manualInput = document.getElementById('manual-input');
             const input = manualInput.value.trim();
@@ -1058,26 +903,18 @@
             else {
                 const parsed = parseClassNumber(input);
                 if (parsed) {
-                    // 嘗試多種格式查找
-                    const formatsToTry = [
-                        `${parsed.class} ${parsed.number}`, // 原始格式
-                        `${parsed.class} ${parsed.number.padStart(2, '0')}`, // 補零格式
-                    ];
+                    // 只使用無補零格式查找
+                    const formatToTry = `${parsed.class} ${parsed.number}`;
+                    studentId = getStudentIdByClassNumber(formatToTry);
                     
-                    for (const format of formatsToTry) {
-                        studentId = getStudentIdByClassNumber(format);
-                        if (studentId) {
-                            displayName = format;
-                            break;
-                        }
-                    }
-                    
-                    if (!studentId) {
+                    if (studentId) {
+                        displayName = formatToTry;
+                    } else {
                         showStatus(`未找到對應的學生證號: ${parsed.class} ${parsed.number}，請先載入映射文件`, 'error');
                         return;
                     }
                 } else {
-                    showStatus(`無效輸入格式: ${input} (必須是8位數字 或 班別 學號，格式如: P1A 1)`, 'error');
+                    showStatus(`無效輸入格式: ${input} (必須是8位數字 或 班別 學號，格式如: P1A 1，學號不允許補零格式)`, 'error');
                     return;
                 }
             }
@@ -1116,8 +953,7 @@
                 const parts = displayName.split(' ');
                 if (parts.length === 2) {
                     record.class = parts[0];
-                    // 移除前導零
-                    record.number = String(parseInt(parts[1]));
+                    record.number = parts[1];
                 }
             }
             
