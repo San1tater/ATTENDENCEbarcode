@@ -385,7 +385,7 @@
                         <ul>
                             <li>第一列：學生證號 (8位數字)</li>
                             <li>第二列：班別 (例如: P1A)</li>
-                            <li>第三列：學號 (例如: 1 或 01)</li>
+                            <li>第三列：學號 (例如: 1)</li>
                         </ul>
                     </div>
                 </div>
@@ -411,8 +411,8 @@
             
             <div class="manual-input">
                 <label for="manual-input">手動輸入</label>
-                <input type="text" id="manual-input" placeholder="可輸入學生證號 或 班別 學號 (如: P2D 1)">
-                <div class="manual-input-format">支援格式：學生證號 (8位數字) 或 班別+空格+學號 (如: P2A 1)</div>
+                <input type="text" id="manual-input" placeholder="可輸入學生證號 或 班別 學號 (如: P1A 1)">
+                <div class="manual-input-format">支援格式：學生證號 (8位數字) 或 班別+空格+學號 (如: P1A 1)</div>
                 <button id="manual-submit" class="secondary">手動登記</button>
             </div>
             
@@ -549,7 +549,7 @@
         
         // 解析班別學號格式
         function parseClassNumber(input) {
-            // 格式：班別 學號，如 "P2D 1" 或 "P2D 01"
+            // 格式：班別 學號，如 "P1A 1" 或 "P1A 01"
             // 支持單數和雙數學號格式
             const pattern = /^([A-Za-z][0-9][A-Za-z])\s+([0-9]{1,2})$/;
             const match = input.match(pattern);
