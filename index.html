@@ -129,6 +129,15 @@
             color: white;
         }
         
+        button.loaded {
+            background-color: #34a853;
+            color: white;
+        }
+        
+        button.loaded:hover {
+            background-color: #2e8b47;
+        }
+        
         .video-container {
             position: relative;
             width: 100%;
@@ -538,7 +547,26 @@
             // 更新映射狀態顯示
             updateMappingStatus();
             updateReverseMapping();
+            
+            // 檢查並更新載入映射文件按鈕狀態
+            updateLoadMappingButton();
         });
+        
+        // 更新載入映射文件按鈕狀態
+        function updateLoadMappingButton() {
+            const loadButton = document.getElementById('load-mapping');
+            const count = Object.keys(studentMapping).length;
+            
+            if (count > 0) {
+                loadButton.textContent = '已載入映射文件';
+                loadButton.classList.remove('secondary');
+                loadButton.classList.add('loaded');
+            } else {
+                loadButton.textContent = '載入映射文件';
+                loadButton.classList.remove('loaded');
+                loadButton.classList.add('secondary');
+            }
+        }
         
         // 驗證學生證號格式
         function isValidStudentId(studentId) {
@@ -618,6 +646,7 @@
                     
                     updateMappingStatus();
                     updateReverseMapping();
+                    updateLoadMappingButton(); // 更新按鈕狀態
                     showStatus(`成功載入 ${validCount} 條學生映射記錄`, 'success');
                 } catch (error) {
                     console.error('解析Excel文件錯誤:', error);
@@ -1544,9 +1573,9 @@
             sortedClasses.forEach(className => {
                 const classData = statsData.summary[className];
                 
-                // 創建班別標題
+                // 創建班別標題 - 修改為顯示總參與次數
                 const classTitle = document.createElement('h4');
-                classTitle.textContent = `班別: ${className} (${classData.studentCount} 名學生)`;
+                classTitle.textContent = `班別: ${className} (${classData.studentCount} 名學生，總參與次數${classData.totalAttendance}次)`;
                 classTitle.style.marginTop = '20px';
                 classTitle.style.marginBottom = '10px';
                 classTitle.style.color = '#1a73e8';
@@ -1586,12 +1615,16 @@
                         <td>${student.count}</td>
                     `;
                     
-                    // 根據參與次數添加顏色標識
+                    // 根據參與次數添加不同底色標示
+                    // 新配色邏輯：最低檔無底色，中檔淺黃色，最高檔淺綠色
                     if (student.count === statsData.sessions) {
-                        row.style.backgroundColor = '#e6f4ea'; // 全勤
-                    } else if (student.count >= statsData.sessions * 0.7) {
-                        row.style.backgroundColor = '#fef7e0'; // 高參與率
+                        // 最高檔：全勤（100%）- 淺綠色
+                        row.style.backgroundColor = '#e6f4ea';
+                    } else if (student.count >= Math.ceil(statsData.sessions / 2)) {
+                        // 中檔：參與次數達到總活動數一半以上 - 淺黃色
+                        row.style.backgroundColor = '#fef7e0';
                     }
+                    // 最低檔：參與次數低於總活動數一半 - 無底色（保持原樣）
                     
                     tbody.appendChild(row);
                 });
